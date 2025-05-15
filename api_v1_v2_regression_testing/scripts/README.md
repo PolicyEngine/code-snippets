@@ -34,11 +34,11 @@ Each request in the JSON array should follow this structure:
 - The default configuration polls up to 600 times with 1-second intervals, allowing a simulation run to take up to 10 minutes before timing out
 - Requests are processed in batches of 10 with 2-minute pauses between batches
 
-# extract_http_requests.py
+## extract_http_requests.py
 
 The `extract_http_requests.py` script is a Python tool for extracting HTTP PolicyEngine API request logs from GCP. It implements rate limiting to avoid GCP throttling.
 
-## Usage
+### Usage
 
 1. Ensure you have appropriate GCP credentials configured in your environment.
 2. Install required dependencies: `pip install google-cloud-logging`
@@ -48,7 +48,8 @@ The `extract_http_requests.py` script is a Python tool for extracting HTTP Polic
   python extract_http_requests.py [options]
   ```
 
-## Command Line Options
+### Command Line Options
+```
 --project-id      GCP project ID (default: "policyengine-app")
 --start-time      Start time in ISO format (e.g., 2025-04-01T00:00:00+00:00)
 --end-time        End time in ISO format (e.g., 2025-05-01T00:00:00+00:00)
@@ -57,8 +58,8 @@ The `extract_http_requests.py` script is a Python tool for extracting HTTP Polic
 --page-size       Number of results per API call (default: 100)
 --sleep-interval  Records to process before sleeping (default: 100)
 --sleep-duration  Sleep duration in seconds (default: 1.0)
-
-## Important Notes
+```
+### Important Notes
 
 * This script requires the `google-cloud-logging` library
 * Only requests with paths starting with "/us/policy" or "/uk/policy" are extracted
@@ -66,6 +67,7 @@ The `extract_http_requests.py` script is a Python tool for extracting HTTP Polic
 * Results are saved in a simplified JSON format with resource path and timestamp
 * If not specified, the time range defaults to the last 24 hours
 * The script implements pauses to avoid rate limiting on the Google Cloud API
+
 ## pull_all_logs.py
 
 This script searches through PolicyEngine's Google Cloud logs, finds all logs matching a certain condition, then batches them and provides analytics. It is still under construction and has not yet been tested. More info to come later.
