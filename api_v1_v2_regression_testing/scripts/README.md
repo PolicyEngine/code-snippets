@@ -70,4 +70,44 @@ The `extract_http_requests.py` script is a Python tool for extracting HTTP Polic
 
 ## pull_all_logs.py
 
-This script searches through PolicyEngine's Google Cloud logs, finds all logs matching a certain condition, then batches them and provides analytics. It is still under construction and has not yet been tested. More info to come later.
+The `pull_all_logs.py` script is a Python tool for extracting and analyzing economy simulation logs from Google Cloud Platform. It queries logs with messages starting with "CALCULATE_ECONOMY_SIMULATION_JOB" while handling rate limits and producing message frequency metrics.
+
+### Usage
+
+1. Ensure you have proper GCP authentication configured for your environment.
+2. Run the script with desired parameters: `python pull_all_logs.py --start-time 2025-04-01T00:00:00+00:00 --end-time 2025-05-01T00:00:00+00:00`
+3. View results in the output JSON file (default: `simulation_logs.json`).
+4. Review message frequency metrics in the metrics file (default: `message_metrics.json`).
+
+### Command-line Parameters
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `--project-id` | GCP project ID | `policyengine-api` |
+| `--start-time` | Start time in ISO format | 24 hours ago |
+| `--end-time` | End time in ISO format | current time |
+| `--output-file` | Path to save log results | `simulation_logs.json` |
+| `--metrics-file` | Path to save message metrics | `message_metrics.json` |
+| `--max-results` | Maximum number of results | 1,000,000,000 |
+| `--page-size` | Results per API call | 100 |
+| `--sleep-interval` | Records before sleeping | 100 |
+| `--sleep-duration` | Sleep duration in seconds | 1.0 |
+
+### Output Format
+
+The script produces two output files:
+
+1. **Log Output File:** JSON array of log entries with:
+   - `timestamp`: When the log was created
+   - `jsonPayload`: Full JSON payload of the log entry
+
+2. **Metrics Output File:** Analysis of message frequencies:
+   - `total_logs`: Total matching logs found
+   - `message_counts`: Frequency of each unique message
+   - `unique_message_count`: Number of unique messages
+   - `generated_at`: Timestamp of metrics generation
+
+### Important notes
+- Appropriate GCP permissions needed to access logs
+- Sleeps after processing batches (configurable via `--sleep-interval` and `--sleep-duration`)
+- Uses longer sleep intervals between time windows to avoid API rate limits
