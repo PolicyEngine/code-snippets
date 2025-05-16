@@ -1,4 +1,5 @@
 # API v1 and v2 regression testing scripts
+This file contains scripts used as part of API v1/v2 regression testing. `extract_http_requests.py` was first used to find all unique requests made by the front-end application to the API's `/<country_id>/policy` endpoint, capturing all society-wide simulation calls from April 8 to May 8, 2025. After taking the outputs (stored in the `json` folder in the `api_v1_v2_regression_testing` directory) and removing invalid ones, `emit_structured_requests.py` was used to take the remaining objects and essentially re-run these API requests. Finally, `pull_all_logs.py` was used to find and save all logs relevant to the v1/v2 regression testing process, as well as save some aggregated diagnostic data.
 
 ## emit_structured_requests.py
 
