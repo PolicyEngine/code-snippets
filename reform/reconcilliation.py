@@ -1,5 +1,8 @@
 # This code was slighly adapted from Pavel's notebook to run with local installations
-# of the various repos
+# of the various repos. The original notebook is at
+# analysis-notebooks/us/reconciliation$ vim 2026_reconciliation.ipynb
+# And includes more reforms than this file
+
 
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
