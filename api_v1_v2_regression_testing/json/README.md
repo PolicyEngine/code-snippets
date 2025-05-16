@@ -1,4 +1,4 @@
-# API v1 and v2 regression testing JSON
+# API v1 and v2 regression testing markdown & JSON
 This folder contains JSON and markdown files used as part of API v1/v2 regression testing. The "Outputs/diagnostic logs" header below contains the outputs of the testing, while "Inputs" includes all individual regression test policies.
 
 ## Outputs/diagnostic logs
