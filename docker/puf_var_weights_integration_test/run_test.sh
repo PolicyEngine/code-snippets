@@ -42,7 +42,6 @@ git checkout origin/fix/210-add-python312-ci -- policyengine_us_data/utils/githu
 
 # us-data downloads and processing
 make download
-# TODO: figure out how to pass in hugging face token as environment variable in docker run
 make data
 
 echo "--- Run the testing portion ---"

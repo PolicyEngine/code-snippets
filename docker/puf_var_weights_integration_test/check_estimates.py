@@ -26,7 +26,7 @@ baseline_branching_reform = Reform.from_dict(
 
 qbid_reform = Reform.from_dict({
   "gov.irs.deductions.qbi.max.rate": {
-    "2026-01-01.2100-12-31": 0.22
+    "2026-01-01.2100-12-31": 0.23
   },
   "gov.irs.deductions.qbi.max.w2_wages.rate": {
     "2026-01-01.2100-12-31": 0.5
