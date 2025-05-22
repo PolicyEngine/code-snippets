@@ -15,6 +15,10 @@ All v1/v2 regression testing logs from 9pm Eastern Wednesday, May 14, to 8:15pm 
 
 Accompanies `simulation_logs.json`; divides all logs up by their output message. Logs with "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job failed" mean that API v1 succeeded, while v2 failed. Logs containing "CALCULATE_ECONOMY_SIMULATION_JOB: APIv1 job failed" mean that v1 failed, regardless of v2's status.
 
+### budgetary_impact_comparisons.json
+
+Aggregates all regression test outputs where v1 and v2 both succeeded, but the two differed by 5% or more, ordered by the difference measured.
+
 ## Inputs
 
 ### feature_http_requests.json
