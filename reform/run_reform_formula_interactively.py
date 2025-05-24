@@ -28,6 +28,9 @@ qbid_reform = Reform.from_dict({
   "gov.contrib.reconciliation.qbid.phase_out_rate": {
     "2026-01-01.2100-12-31": 0.75
   },
+  "gov.contrib.reconciliation.qbid.use_bdc_income": {
+    "2026-01-01.2100-12-31": False 
+  },
   "gov.irs.deductions.qbi.phase_out.length.HEAD_OF_HOUSEHOLD": {
     "2026-01-01.2100-12-31": 50_000.0 
   },
@@ -107,8 +110,9 @@ qbid_reform = Reform.from_dict({
 
 
 # Create a simulation as we will harvest its internals
-sim = Microsimulation(dataset=EnhancedCPS_2024, reform=qbid_reform)
-year = 2029
+#sim = Microsimulation(dataset=EnhancedCPS_2024, reform=qbid_reform)
+#year = 2029
+year = 2021
 period = period_(year)
 
 # Entity init arguments are: the key, the plural, the label, the doc string
@@ -123,8 +127,100 @@ person.entity.set_tax_benefit_system(sim.tax_benefit_system)  # and a tax benefi
 
 parameters = sim.tax_benefit_system.parameters
 
+p = parameters(period).gov.irs.deductions.qbi
 
-# First, let's do qualified business income within:
+# 1. Table 2, Panel A, Entity 1, as is
+
+# 1. Table 2, Panel A, Entity 1, income set to 20K over upper threshold 
+# 2. Table 2, Panel A, Entity 1, income set to 10K under lower threshold 
+# 3. Table 2, Panel A, Entity 4, as is
+# 4. Table 2, Panel A, Entity 4, income set to 20K over upper threshold 
+# 5. Table 2, Panel A, Entity 4, income set to 10K under lower threshold 
+# 6. O3 example where qbi is large but taxible income is modest 
+
+# The original qbid_amount.py
+#qbi = person("qualified_business_income", period)
+qbi = np.array([80_000, 80_000, 80_000, 110_000, 110_000, 110_000, 200_000])
+
+qbid_max = p.max.rate * qbi  # Worksheet 12-A, line 3
+# compute caps
+# w2_wages = person("w2_wages_from_qualified_business", period)
+w2_wages = np.array([8_000, 8_000, 8_000, 60_000, 60_000, 60_000, 150_000])
+# b_property = person("unadjusted_basis_qualified_property", period)
+b_property = np.array([50_000, 50_000, 50_000, 6_000, 6_000, 6_000, 0])
+wage_cap = w2_wages * p.max.w2_wages.rate  # Worksheet 12-A, line 5
+alt_cap = (  # Worksheet 12-A, line 9
+    w2_wages * p.max.w2_wages.alt_rate
+    + b_property * p.max.business_property.rate
+)
+full_cap = max_(wage_cap, alt_cap)  # Worksheet 12-A, line 10
+# compute phase-out ranges
+# taxinc_less_qbid = person.tax_unit("taxable_income_less_qbid", period)
+taxinc_less_qbid = np.array([400_100, 460_100, 330_100, 400_100, 460_100, 330_100, 120_000])
+
+# filing_status = person.tax_unit("filing_status", period)
+# po_start = p.phase_out.start[filing_status]
+# po_length = p.phase_out.length[filing_status]
+
+# Joint filer 2022
+po_start = np.repeat(340_100, qbi.shape[0])
+po_length = np.repeat(100_000, qbi.shape[0])
+
+# compute phase-out limited QBID amount
+reduction_rate = min_(  # Worksheet 12-A, line 24; Schedule A, line 9
+    1, (max_(0, taxinc_less_qbid - po_start)) / po_length
+)
+applicable_rate = 1 - reduction_rate  # Schedule A, line 10
+
+#is_sstb = person("business_is_sstb", period)
+is_sstb = np.array([0, 0, 0, 1, 1, 1, 0])
+# Schedule A, line 11
+sstb_multiplier = where(is_sstb, applicable_rate, 1)
+adj_qbid_max = qbid_max * sstb_multiplier
+# Schedule A, line 12 and line 13
+adj_cap = full_cap * sstb_multiplier
+line11 = min_(adj_qbid_max, adj_cap)  # Worksheet 12-A, line 11
+# NOTE: the above logic is just applying a multiplier if it's an SSTB, not sure why
+
+# compute phased reduction
+reduction = reduction_rate * max_(  # Worksheet 12-A, line 25
+    0, adj_qbid_max - adj_cap
+)
+line26 = max_(0, adj_qbid_max - reduction)
+
+# Asking whether the wage and property amount is less than qbi * 20%, if so, using adj qbi * 20%. Why?
+line12 = where(adj_cap < adj_qbid_max, line26, 0)   # Awkward mechanism to chose reduced qbi * 20% the next line if prop cap is larger 
+max_(line11, line12)  # Worksheet 12-A, line 13
+
+
+# Error in the original code on 7:
+
+# The dataframe shown in the canvas highlights the $16 000 overstatement.
+# 
+# Why it happens:
+# 
+# Below the W-2/UBIA threshold: both versions start with 20 % × QBI → $40 000.
+# 
+# Overall 20 % income cap:
+# Statute: min(deduction so far, 20 % × taxable income) → min($40 000, $24 000) = $24 000.
+# Original code: skips this check → allows the full $40 000, violating §199A(a)(2).
+
+# Get's the right answer on a Non-SSTB within the phase in range, but:
+# SSTB multiplier seems too simple
+# Unclear how this works outside of the threshold
+
+# 3 What else you might need
+# Overall 20 % taxable-income cap
+# After you aggregate all businesses and REIT/PTP amounts, §199A(a)(2) limits the deduction to 20 % of (taxable income – net capital gain). That happens later on Form 8995-A; if your engine applies it elsewhere, you’re good—just be sure it’s in the pipeline.
+# 
+# Carry-forwards & loss netting
+# Schedule C net-loss carry-forwards, suspended losses, patron reductions, etc., are outside this block. If you track them elsewhere, fine; otherwise, add them.
+# 
+# Aggregation & multi-business taxpayers
+# The snippet is business-level. When you aggregate businesses you’ll need to apply the wage/UBIA limit and phase-in at the aggregation level, then allocate the allowed deduction back to owners.
+
+
+# Now, let's do qualified business income within:
 # variables/gov/irs/income/taxable_income/.../qualified_business_income.py
 
 p = parameters(period).gov.irs.deductions.qbi
@@ -141,92 +237,44 @@ print(np.dot(qbi, w)  / 1E9)
 # Compare to:
 sim.calculate("qualified_business_income", map_to="household", period=year).sum() / 1E9
 
-# My analysis  ---
 
-# ---- and NOW you can start to run the formula in: 
-# /policyengine_us/reforms/reconciliation/reconciled_qbid.py  ------- 
-reform = True
-if reform == True:  
-    p = parameters(period).gov.irs.deductions
-    
-    # 1. Compute the new maximum QBID
-    # Grab this from the interactive code above
-    #qbi = person("qualified_business_income", period)
-    qbid_max = p.qbi.max.rate * qbi
-    
-    # 2. Compute the wage/property cap (unchanged)
-    w2_wages = person("w2_wages_from_qualified_business", period)
-    b_property = person("unadjusted_basis_qualified_property", period)
-    wage_cap = w2_wages * p.qbi.max.w2_wages.rate
-    alt_cap = (
-        w2_wages * p.qbi.max.w2_wages.alt_rate
-        + b_property * p.qbi.max.business_property.rate
-    )
-    full_cap = max_(wage_cap, alt_cap)
-    
-    # 3. Phase-out logic: 75% of each dollar above the threshold
-    taxinc_less_qbid = person.tax_unit(
-        "taxable_income_less_qbid", period
-    )
-    filing_status = person.tax_unit("filing_status", period)
-    threshold = p.qbi.phase_out.start[filing_status]
-    p_ref = parameters(period).gov.contrib.reconciliation.qbid
-    phase_out_rate = p_ref.phase_out_rate 
-    excess_income = max_(0, taxinc_less_qbid - threshold)
-    reduction_amount = phase_out_rate * excess_income
-    # 4. Apply phase-out to the deduction
-    phased_deduction = max_(0, qbid_max - reduction_amount)
-    # 5. Final QBID is the lesser of the phased deduction or the wage/property cap
-    qbid = min_(phased_deduction, full_cap)
+# taxinc_less_qbid
 
-    # Note that qbid is a vector
-    len(qbid)
-    assert(len(w) == len(qbid))
-    print(np.dot(qbid, w)  / 1E9)
+# Entity init arguments are: the key, the plural, the label, the doc string
+TaxUnit = Entity("tax_unit", "tax_units", "Tax Unit", "A tax unit")
+print(TaxUnit.key)
 
-    len(qbid2)
-    print(np.dot(qbid2, w)  / 1E9)
+# Population: Lowercase p person
+tax_unit = Population(TaxUnit)
+tax_unit.simulation = sim  # populations need simulations
+tax_unit.entity.set_tax_benefit_system(sim.tax_benefit_system)  # and a tax benefit system through their entity
+year = 2029
+period = period_(year)
 
-    # Compare to:
-    sim.calculate("qbid_amount", map_to="household", period=year).sum() / 1E9
- 
-else:
-    p = parameters(period).gov.irs.deductions.qbi
-    # Grab this from the interactive code above
-    #qbi = person("qualified_business_income", period)
-    qbid_max = p.max.rate * qbi  # Worksheet 12-A, line 3
-    # compute caps
-    w2_wages = person("w2_wages_from_qualified_business", period)
-    b_property = person("unadjusted_basis_qualified_property", period)
-    wage_cap = w2_wages * p.max.w2_wages.rate  # Worksheet 12-A, line 5
-    alt_cap = (  # Worksheet 12-A, line 9
-        w2_wages * p.max.w2_wages.alt_rate
-        + b_property * p.max.business_property.rate
-    )
-    full_cap = max_(wage_cap, alt_cap)  # Worksheet 12-A, line 10
-    # compute phase-out ranges
-    taxinc_less_qbid = person.tax_unit("taxable_income_less_qbid", period)
-    filing_status = person.tax_unit("filing_status", period)
-    po_start = p.phase_out.start[filing_status]
-    po_length = p.phase_out.length[filing_status]
-    # compute phase-out limited QBID amount
-    reduction_rate = min_(  # Worksheet 12-A, line 24; Schedule A, line 9
-        1, (max_(0, taxinc_less_qbid - po_start)) / po_length
-    )  # mean of .16
-    applicable_rate = 1 - reduction_rate  # Schedule A, line 10
-    is_sstb = person("business_is_sstb", period)
-    # Schedule A, line 11
-    sstb_multiplier = where(is_sstb, applicable_rate, 1)
-    adj_qbid_max = qbid_max * sstb_multiplier
-    # Schedule A, line 12 and line 13
-    adj_cap = full_cap * sstb_multiplier
-    line11 = min_(adj_qbid_max, adj_cap)  # Worksheet 12-A, line 11
-    # compute phased reduction
-    reduction = reduction_rate * max_(  # Worksheet 12-A, line 25
-        0, adj_qbid_max - adj_cap
-    )
-    line26 = max_(0, adj_qbid_max - reduction)
-    line12 = where(adj_cap < adj_qbid_max, line26, 0)
-    qbid = max_(line11, line12)  # Worksheet 12-A, line 13
-   
-    print(np.dot(qbid, w)  / 1E9)
+parameters = sim.tax_benefit_system.parameters
+
+p = parameters(period).gov.irs.deductions.qbi
+
+agi = tax_unit("adjusted_gross_income", period)
+p = parameters(period).gov.irs.deductions
+ded_if_itemizing = [
+    deduction
+    for deduction in p.deductions_if_itemizing
+    if deduction != "qualified_business_income_deduction"
+]
+ded_if_not_itemizing = [
+    deduction
+    for deduction in p.deductions_if_not_itemizing
+    if deduction != "qualified_business_income_deduction"
+]
+ded_value_if_itemizing = add(tax_unit, period, ded_if_itemizing)
+ded_value_if_not_itemizing = add(
+    tax_unit, period, ded_if_not_itemizing
+)
+itemizes = tax_unit("tax_unit_itemizes", period)
+ded_value = where(
+    itemizes,
+    ded_value_if_itemizing,
+    ded_value_if_not_itemizing,
+)
+max_(0, agi - ded_value)   # return
