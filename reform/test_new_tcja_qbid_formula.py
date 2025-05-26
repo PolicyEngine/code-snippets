@@ -31,24 +31,6 @@ parameters = sim.tax_benefit_system.parameters
 
 p = parameters(period).gov.irs.deductions.qbi
 
-
-
-from policyengine_us.model_api import *
-
-# ————————————————— 1.  Basic inputs ————————————————————————————
-qbi                  = person("qualified_business_income", period)
-w2_wages             = person("w2_wages_from_qualified_business", period)
-ubia_property        = person("unadjusted_basis_qualified_property", period)
-is_sstb              = person("business_is_sstb", period)
-reit_ptp_income      = person("qualified_reit_and_ptp_income", period)
-
-tax_inc_before_qbid  = person.tax_unit("taxable_income_less_qbid", period)
-filing_status        = person.tax_unit("filing_status", period)
-
-# Thresholds and ranges keyed by filing status come from parameters
-income_threshold     = p.phase_out.start[filing_status]
-phase_in_range       = p.phase_out.length[filing_status]
-
 # Manual inputs to test
 qbi = np.array([80_000, 80_000, 80_000, 110_000, 110_000, 110_000, 200_000])
 w2_wages = np.array([8_000, 8_000, 8_000, 60_000, 60_000, 60_000, 150_000])
