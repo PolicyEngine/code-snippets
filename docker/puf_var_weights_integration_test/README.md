@@ -13,3 +13,16 @@ Or. to run interactively,
 ```
 sudo docker run --rm -it -e HUGGING_FACE_TOKEN=$HUGGING_FACE_TOKEN $PIPELINE_NAME /bin/bash
 ```
+
+
+Detach: Ctrl+P, Ctrl+Q
+Reattach: sudo docker attach wizardly_joliot
+New shell: sudo docker exec -it wizardly_joliot /bin/bash
+
+# restart  get back in
+sudo docker restart wizardly_joliot
+sudo docker exec -it wizardly_joliot /bin/bash
+
+# Stop and start fresh (you'll lose any unsaved work in the container)
+sudo docker stop wizardly_joliot
+sudo docker start -i wizardly_joliot
