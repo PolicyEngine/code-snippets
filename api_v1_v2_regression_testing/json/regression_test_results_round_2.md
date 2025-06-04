@@ -1,5 +1,15 @@
 Total regression tests: 36
 * v1 and v2 complete and compare successfully: 26
+  * v1 and v2 budgetary impacts differ by 5% or less: 18
+  * v1 and v2 budgetary impacts differ by 5%+: 8 (sorted by difference below)
+    * Sim API run: 07874967-79e4-4f82-af7d-4b0231fc4941; difference: 2,304%
+    * Sim API run: ab8bc6c8-6956-4a0e-ac07-1d31c00fd075; difference: 18%
+    * Sim API run: 51cc31b3-fd2d-4605-8819-178d59458926
+    * Sim API run: 98a82089-745a-4530-803b-421d7f896077
+    * Sim API run: 51bcf9b0-d0be-417f-8b6f-4595b939eb04
+    * Sim API run: 4fce5bce-fe06-404b-8453-3d8a6525e07d
+    * Sim API run: 3b1642c7-2aed-4f3a-adfa-56076f258eb2
+    * Sim API run: 7972afa7-25c3-4761-937b-c18a048c3c72
 * v1 fails: 1
   * Cause: nyc calculations not properly encouding using county FIPS: 1
     * Record: The only nyc policy in the set of 36 tests
