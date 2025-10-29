@@ -12,7 +12,12 @@ all_results = []
 
 for state in states:
     print(f"Processing {state}...")
-    sim = Microsimulation(dataset=f"hf://policyengine/policyengine-us-data/{state}.h5")
+    try:
+        sim = Microsimulation(dataset=f"hf://policyengine/test/{state}.h5")
+        print(f"  Using test repository for {state}")
+    except:
+        sim = Microsimulation(dataset=f"hf://policyengine/policyengine-us-data/{state}.h5")
+        print(f"  Using main repository for {state}")
     df = sim.calculate_dataframe(["household_id", "household_weight", "congressional_district_geoid", "state_fips", "snap"], map_to="household")
     df['weighted_snap'] = df['household_weight'] * df['snap']
     weighted_totals = df.groupby(['congressional_district_geoid', 'state_fips'])['weighted_snap'].sum().reset_index()
