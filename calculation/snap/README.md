@@ -6,7 +6,7 @@
 
 Survey-weighted estimates of total SNAP benefits by congressional district across all 50 states plus DC.
 
-**Total SNAP Benefits: $94 billion**
+**Total SNAP Benefits: $69.4 billion**
 
 ## Prerequisites
 
@@ -25,31 +25,32 @@ cd /home/baogorek/devl/code-snippets/calculation/snap
 
 ## Data
 
-- **Source:** PolicyEngine US microsimulation data (state-level .h5 files)
-- **Districts:** 725 congressional districts
-- **Variables:** household_id, household_weight, congressional_district_geoid, snap
+- **Source:** PolicyEngine test repository (hf://policyengine/test) with corrected district assignments
+- **Districts:** 436 congressional districts
+- **Variables:** household_id, household_weight, congressional_district_geoid, state_fips, snap
+- **Range:** $26M - $475M per district
 
 ## Results
 
 ### Top States by SNAP Benefits
 
-| State | Total Benefits |
-|-------|----------------|
-| AL    | $15.1B         |
-| AZ    | $14.7B         |
-| CA    | $8.6B          |
-| AK    | $5.5B          |
-| AR    | $4.6B          |
+| State FIPS | State | Total Benefits |
+|------------|-------|----------------|
+| 6          | CA    | $10.9B         |
+| 36         | NY    | $5.5B          |
+| 48         | TX    | $5.1B          |
+| 12         | FL    | $4.3B          |
+| 17         | IL    | $3.5B          |
 
 ### Top Districts by SNAP Benefits
 
-| District | State | Total Benefits |
-|----------|-------|----------------|
-| 1001     | AL    | $15.0B         |
-| 4001     | AZ    | $14.6B         |
-| 601      | CA    | $8.6B          |
-| 2001     | AK    | $5.0B          |
-| 5001     | AR    | $4.5B          |
+| District | State FIPS | Total Benefits |
+|----------|------------|----------------|
+| 1502     | 15 (HI)    | $475M          |
+| 3615     | 36 (NY)    | $463M          |
+| 3613     | 36 (NY)    | $412M          |
+| 621      | 6 (CA)     | $404M          |
+| 1501     | 15 (HI)    | $403M          |
 
 ## Visualization
 
