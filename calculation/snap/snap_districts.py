@@ -13,16 +13,18 @@ all_results = []
 for state in states:
     print(f"Processing {state}...")
     sim = Microsimulation(dataset=f"hf://policyengine/policyengine-us-data/{state}.h5")
-    df = sim.calculate_dataframe(["household_id", "household_weight", "congressional_district_geoid", "snap"], map_to="household")
+    df = sim.calculate_dataframe(["household_id", "household_weight", "congressional_district_geoid", "state_fips", "snap"], map_to="household")
     df['weighted_snap'] = df['household_weight'] * df['snap']
-    weighted_totals = df.groupby('congressional_district_geoid')['weighted_snap'].sum().reset_index()
+    weighted_totals = df.groupby(['congressional_district_geoid', 'state_fips'])['weighted_snap'].sum().reset_index()
     weighted_totals.rename(columns={'weighted_snap': 'total_weighted_snap'}, inplace=True)
-    weighted_totals['state'] = state
     all_results.append(weighted_totals)
 
 combined_df = pd.concat(all_results, ignore_index=True)
+combined_df = combined_df.groupby(['congressional_district_geoid', 'state_fips'])['total_weighted_snap'].sum().reset_index()
+combined_df = combined_df.sort_values(['state_fips', 'congressional_district_geoid'])
 combined_df.to_csv('snap_by_congressional_district.csv', index=False)
 print("--- Weighted SNAP Totals by Congressional District (All States) ---")
 print(combined_df)
 print(f"\nTotal districts: {len(combined_df)}")
 print(f"Total SNAP benefits: ${combined_df['total_weighted_snap'].sum():,.0f}")
+print(f"\nDistricts with SNAP < $1000: {(combined_df['total_weighted_snap'] < 1000).sum()}")
