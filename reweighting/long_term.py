@@ -5,7 +5,8 @@ import numpy as np
 
 from policyengine_us import Microsimulation
 
-H5_PATH = '/home/baogorek/devl/sep/policyengine-us-data/policyengine_us_data/datasets/cps/long_term/projected_datasets/'
+#H5_PATH = '/home/baogorek/devl/sep/policyengine-us-data/policyengine_us_data/datasets/cps/long_term/projected_datasets/'
+H5_PATH = 'hf://policyengine/test/'
 
 # 2027
 sim = Microsimulation(dataset = H5_PATH + "2027.h5")
