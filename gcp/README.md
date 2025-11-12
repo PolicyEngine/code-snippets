@@ -1,14 +1,50 @@
+# GCP Infrastructure
+
+This directory contains scripts and documentation for GCP infrastructure setup.
+
+## Contents
+
+- **Jupyter Lab**: [`create_jupyter_spot.sh`](./create_jupyter_spot.sh) - Interactive development environment ([quick start](./JUPYTER_QUICK_START.md))
+- **GitHub Runners**: [`github-runners/`](./github-runners/) - Self-hosted CI/CD runners ([setup guide](./github-runners/README.md))
+- **Planning Docs**: `GITHUB_RUNNER_SETUP.md`
+
+---
+
 # GCP Jupyter Lab Setup Guide
 
-Complete guide for creating and accessing a 64 GB spot instance with Python 3.13 and Jupyter Lab on Google Cloud Platform for PolicyEngine team members.
+Complete guide for creating and accessing a 64 GB spot instance with Python 3.13 (via uv) and auto-starting Jupyter Lab on Google Cloud Platform for PolicyEngine team members.
 
 ## Table of Contents
+- [Quick Start](#quick-start)
 - [Creating the VM (Admin)](#creating-the-vm-admin)
+- [Python Environment](#python-environment)
 - [Accessing Jupyter Lab (Windows)](#accessing-jupyter-lab-windows)
 - [Accessing Jupyter Lab (Mac/Linux)](#accessing-jupyter-lab-maclinux)
 - [Managing the VM](#managing-the-vm)
 - [Cost Management](#cost-management)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick Start
+
+**For first-time users:**
+
+1. **Create the VM** (Admin only, ~2 minutes):
+   ```bash
+   ./create_jupyter_spot.sh
+   ```
+
+2. **Wait 2 minutes** for automatic setup to complete
+
+3. **Connect with SSH tunnel**:
+   ```bash
+   gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
+   ```
+
+4. **Open browser** to: http://localhost:8888
+
+That's it! Jupyter Lab is running automatically with Python 3.13.
 
 ---
 
@@ -25,7 +61,7 @@ Complete guide for creating and accessing a 64 GB spot instance with Python 3.13
 ./create_jupyter_spot.sh
 ```
 
-The script takes ~10-15 minutes to complete (compiling Python 3.13 from source).
+The script takes ~2 minutes to complete (using uv for fast Python setup).
 
 ### Option 2: Manual Setup
 
@@ -37,11 +73,50 @@ See the `create_jupyter_spot.sh` script for the full command.
 |------|-------|
 | Machine Type | n2-standard-16 |
 | vCPUs | 16 |
-| Memory | 64 GB |
+| Memory | 64 GB RAM + 32 GB swap |
 | Boot Disk | 200 GB |
 | Cost | ~$180/month (spot) vs $600/month (on-demand) |
-| Python Version | 3.13 |
+| Python Version | 3.13 (via uv) |
+| Package Manager | uv (10-100x faster than pip) |
+| Jupyter | Auto-starts via systemd |
 | Provisioning | Spot (may terminate after 24 hours) |
+
+---
+
+## Python Environment
+
+The VM uses **uv** for ultra-fast Python package management:
+
+### Environment Details
+- **Python Version**: 3.13 (latest stable)
+- **Location**: `/home/jupyter/.venv`
+- **Auto-activation**: Yes (on SSH login)
+- **Package Manager**: `uv` (Rust-based, 10-100x faster than pip)
+
+### Installing Packages
+
+**In Jupyter notebooks:**
+```python
+!uv pip install package-name
+```
+
+**From SSH session:**
+```bash
+uv pip install package-name
+```
+
+### Why uv?
+- **Speed**: Installs packages in seconds, not minutes
+- **Reliability**: No PEP 668 issues on Ubuntu 24.04
+- **Modern**: Built-in Python version management
+- **Simple**: Just works, no complex configuration
+
+### Pre-installed Packages
+- jupyterlab
+- numpy
+- pandas
+- scipy
+- matplotlib
 
 ---
 
@@ -73,23 +148,18 @@ See the `create_jupyter_spot.sh` script for the full command.
    gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
    ```
 
-2. **Get the token** (in the SSH window that opened):
-   ```bash
-   jupyter server list
-   ```
-   Copy the token value from the output.
-
-3. **Access Jupyter**
+2. **Access Jupyter**
    - Open browser to: http://localhost:8888
-   - Paste the token and log in
+   - Jupyter Lab loads automatically (no token needed)
 
 ### Using Jupyter
 
 The environment is pre-configured with:
-- Python 3.13
-- policyengine-us
+- Python 3.13 (auto-activated)
+- Ultra-fast `uv` package manager
 - numpy, pandas, scipy, matplotlib
 - Access to GCS bucket: `policyengine-calibration`
+- Auto-starts on VM boot
 
 ---
 
@@ -123,36 +193,52 @@ The environment is pre-configured with:
    gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
    ```
 
-2. **Get the token** (in the SSH window):
-   ```bash
-   jupyter server list
-   ```
-
-3. **Access Jupyter**:
+2. **Access Jupyter**:
    - Open browser to: http://localhost:8888
-   - Paste the token and log in
+   - Jupyter Lab loads automatically (no token needed)
 
 ---
 
 ## Managing the VM
 
-### Start Jupyter (if not running)
+### SSH Access
 
-SSH into the VM and run:
+**SSH with Jupyter tunnel (most common):**
 ```bash
-source /home/jupyter/pe-env/bin/activate
-jupyter lab --ip=0.0.0.0 --port=8888 --allow-root
+gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
+```
+
+**Plain SSH (for file uploads, service management, etc.):**
+```bash
+gcloud compute ssh jupyter-workstation --zone=us-central1-a
+```
+
+### Jupyter Service Management
+
+Jupyter runs automatically via systemd. If needed:
+
+```bash
+# Check status
+sudo systemctl status jupyter
+
+# Restart service
+sudo systemctl restart jupyter
+
+# View logs
+sudo journalctl -u jupyter -f
 ```
 
 ### Installing Additional Packages
 
 In a Jupyter notebook cell:
 ```python
-# Fix permissions (only needed first time)
-!sudo chown -R $(whoami):$(whoami) /home/jupyter/pe-env
+# Install packages with uv (ultra-fast)
+!uv pip install package-name
+```
 
-# Install packages
-!pip install package-name
+Or from SSH:
+```bash
+uv pip install package-name
 ```
 
 ### Access GCS Buckets
@@ -231,11 +317,26 @@ gcloud compute instances delete jupyter-workstation --zone=us-central1-a
 
 ## Troubleshooting
 
-### "Permission denied" when installing packages
+### Python version shows wrong version
 
-Run in notebook cell:
-```python
-!sudo chown -R $(whoami):$(whoami) /home/jupyter/pe-env
+The environment auto-activates on SSH. To verify:
+```bash
+which python
+# Should show: /home/jupyter/.venv/bin/python
+
+python --version
+# Should show: Python 3.13.x
+```
+
+### "externally-managed-environment" error (Ubuntu 24.04)
+
+This shouldn't happen with uv, but if you see it:
+```bash
+# Make sure you're in the virtual environment
+source /home/jupyter/.venv/bin/activate
+
+# Then use uv pip
+uv pip install package-name
 ```
 
 ### Can't connect to Jupyter / Connection refused
@@ -249,12 +350,15 @@ Run in notebook cell:
    ```bash
    gcloud compute instances start jupyter-workstation --zone=us-central1-a
    ```
+   Wait ~30 seconds for Jupyter to auto-start.
 
-3. SSH in and start Jupyter:
+3. If still not working, check the service:
    ```bash
    gcloud compute ssh jupyter-workstation --zone=us-central1-a
-   source /home/jupyter/pe-env/bin/activate
-   jupyter lab --ip=0.0.0.0 --port=8888 --allow-root
+   sudo systemctl status jupyter
+
+   # If not running, restart it:
+   sudo systemctl restart jupyter
    ```
 
 ### VM was terminated by GCP (spot instance)
@@ -270,13 +374,19 @@ All your notebooks and data are preserved on disk.
 
 Create a new instance with `--machine-type=n1-highmem-16` (104 GB RAM) in the creation script.
 
-### Token doesn't work
+### Need to set up authentication
 
-Generate a new token:
+By default, the setup uses no token for simplicity. To add security:
+
 ```bash
 # SSH into VM
-jupyter server list
-# Or restart Jupyter to get fresh token
+gcloud compute ssh jupyter-workstation --zone=us-central1-a
+
+# Set a password
+jupyter lab password
+
+# Restart the service
+sudo systemctl restart jupyter
 ```
 
 ---
