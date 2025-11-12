@@ -1,4 +1,4 @@
-# Quick Start Guide - Jupyter Lab on GCP
+# Jupyter Lab Quick Start
 
 ## For New Users
 
@@ -17,12 +17,7 @@
    gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
    ```
 
-4. **Get token** (in SSH window):
-   ```bash
-   jupyter server list
-   ```
-
-5. **Access**: Open http://localhost:8888 and paste token
+4. **Access**: Open http://localhost:8888 (no token needed)
 
 ### Mac/Linux Users
 
@@ -42,20 +37,15 @@
    gcloud compute ssh jupyter-workstation --zone=us-central1-a -- -L 8888:localhost:8888
    ```
 
-4. **Get token** (in SSH window):
-   ```bash
-   jupyter server list
-   ```
-
-5. **Access**: Open http://localhost:8888 and paste token
+4. **Access**: Open http://localhost:8888 (no token needed)
 
 ---
 
 ## Pre-installed Software
 
-- Python 3.13
-- policyengine-us
-- numpy, pandas, scipy, matplotlib
+- Python 3.13 (via uv)
+- jupyterlab, numpy, pandas, scipy, matplotlib
+- uv (ultra-fast package manager)
 - Access to GCS bucket: `policyengine-calibration`
 
 ---
@@ -90,12 +80,11 @@ gcloud compute instances list --zone=us-central1-a
 
 ## Troubleshooting
 
-### Can't install packages (permission denied)?
+### Need to install packages?
 
 In notebook cell:
 ```python
-!sudo chown -R $(whoami):$(whoami) /home/jupyter/pe-env
-!pip install package-name
+!uv pip install package-name
 ```
 
 ### VM terminated by GCP?
@@ -107,11 +96,11 @@ gcloud compute instances start jupyter-workstation --zone=us-central1-a
 
 All your data is preserved.
 
-### Token doesn't work?
+### Can't connect?
 
-Get fresh token:
+Check VM is running:
 ```bash
-jupyter server list
+gcloud compute instances list --zone=us-central1-a
 ```
 
 ---
