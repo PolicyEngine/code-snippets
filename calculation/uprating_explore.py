@@ -5,6 +5,35 @@ from policyengine_us import Microsimulation
 sim = Microsimulation(
     dataset="hf://policyengine/policyengine-us-data/cps_2023.h5",
 )
+calculated = [v for v in sim.tax_benefit_system.variables
+              if v not in sim.input_variables]
+
+# 3261
+# Let's look at the calculated variables
+i = 0
+calculated_vars = []
+for computed_variable in sim.tax_benefit_system.variables:
+    if computed_variable not in sim.input_variables:
+        i += 1
+        calculated_vars.append(computed_variable)
+        print(f"{computed_variable} is a calculated variable")
+
+print(f"There are {i} calculated variables in PolicyEngine US")
+
+tbs = sim.tax_benefit_system
+
+# Variables with formulas (truly calculated)
+has_formula = [v for v in tbs.variables
+               if tbs.variables[v].formulas]
+
+# Input variables not in dataset
+missing_inputs = [v for v in tbs.variables
+                  if v not in sim.input_variables
+                  and not tbs.variables[v].formulas]
+
+
+
+# This never worked ----
 sim.macro_cache_read = False
 sim.macro_cache_write = False
 sim.opt_out_cache = True
