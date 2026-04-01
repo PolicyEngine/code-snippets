@@ -2,7 +2,8 @@
 
 set -e
 
-VM_NAME="${1:-dev-$(whoami)}"
+DEFAULT_USER=$(gcloud config get-value account 2>/dev/null | sed 's/@.*//' | tr '.' '-')
+VM_NAME="${1:-dev-${DEFAULT_USER}}"
 DISK_SIZE="${2:-200}"
 
 if gcloud compute instances describe "${VM_NAME}" --zone=us-central1-a &>/dev/null; then
@@ -44,7 +45,9 @@ sysctl vm.swappiness=10
 echo "vm.swappiness=10" >> /etc/sysctl.conf
 
 # Install uv system-wide
-curl -LsSf https://astral.sh/uv/install.sh | CARGO_HOME=/usr/local sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+cp /root/.local/bin/uv /usr/local/bin/uv
+cp /root/.local/bin/uvx /usr/local/bin/uvx
 
 # Ensure uv is on PATH for all users
 cat > /etc/profile.d/dev-env.sh << "EOF"
