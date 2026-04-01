@@ -3,8 +3,8 @@
 ## Create the VM (one-time, admin)
 
 ```bash
-./create_dev_workstation.sh                    # defaults: dev-workstation, 200GB disk
-./create_dev_workstation.sh my-vm 128          # custom name, 128GB disk
+./create_dev_workstation.sh                    # defaults: dev-<your-gcloud-username>, 200GB disk
+./create_dev_workstation.sh dev-maria 128      # custom name, 128GB disk
 ```
 
 Wait ~2 minutes for startup script to finish.
@@ -19,8 +19,7 @@ Grant these roles to the team member's Google email in [IAM & Admin > IAM](https
 
 - **Compute OS Login** (`roles/compute.osLogin`) — allows SSH access
 - **Service Account User** (`roles/iam.serviceAccountUser`) — allows using the research service account
-
-Or alternatively: **Compute Instance Admin (v1)** (`roles/compute.instanceAdmin.v1`) for full instance management.
+- **Compute Instance Admin (v1)** (`roles/compute.instanceAdmin.v1`) — allows creating, stopping, and deleting VMs
 
 ### What the team member needs locally
 
@@ -32,8 +31,9 @@ Or alternatively: **Compute Instance Admin (v1)** (`roles/compute.instanceAdmin.
 ```bash
 gcloud auth login
 gcloud config set project policyengine-research
-gcloud compute config-ssh
 ```
+
+**Note:** `gcloud compute config-ssh` requires project-level metadata permissions that team members may not have. Instead, connect via terminal SSH first (`gcloud compute ssh dev-<name> --zone=us-central1-a`), which sets up instance-level keys automatically. For VS Code, see the connection section below.
 
 No GCP Console access needed. Works fine on low-spec machines (8GB Mac, etc.) since all compute happens on the VM.
 
@@ -44,25 +44,33 @@ No GCP Console access needed. Works fine on low-spec machines (8GB Mac, etc.) si
 ### First-time setup
 
 1. Install VS Code extension: **Remote - SSH**
-2. Run `gcloud compute config-ssh` (generates `~/.ssh/config` entries)
-3. In VS Code: `Ctrl+Shift+P` > **Remote-SSH: Connect to Host** > `dev-workstation.us-central1-a.policyengine-research`
+2. SSH once via terminal to set up keys: `gcloud compute ssh dev-<name> --zone=us-central1-a`
+3. Run `gcloud compute config-ssh` (if you have permissions) or manually add the host to `~/.ssh/config`:
+   ```
+   Host dev-<name>
+       HostName <EXTERNAL_IP>
+       User <your_username>
+       IdentityFile ~/.ssh/google_compute_engine
+   ```
+   Get the IP with: `gcloud compute instances describe dev-<name> --zone=us-central1-a --format='get(networkInterfaces[0].accessConfigs[0].natIP)'`
+4. In VS Code: `Ctrl+Shift+P` > **Remote-SSH: Connect to Host** > select your VM
 
 ### Daily connect
 
 1. Start the VM if stopped:
    ```bash
-   gcloud compute instances start dev-workstation --zone=us-central1-a
+   gcloud compute instances start dev-<name> --zone=us-central1-a
    ```
-2. In VS Code: `Ctrl+Shift+P` > **Remote-SSH: Connect to Host** > `dev-workstation.us-central1-a.policyengine-research`
+2. In VS Code: `Ctrl+Shift+P` > **Remote-SSH: Connect to Host** > select your VM
 
-**Note:** If the VM's external IP changed (happens on stop/start), re-run `gcloud compute config-ssh` before connecting.
+**Note:** The IP changes on stop/start. Re-run `gcloud compute config-ssh` or update the HostName in `~/.ssh/config`.
 
 ---
 
 ## Connect via Terminal
 
 ```bash
-gcloud compute ssh dev-workstation --zone=us-central1-a
+gcloud compute ssh dev-<name> --zone=us-central1-a
 ```
 
 ---
@@ -86,9 +94,9 @@ gcloud compute ssh dev-workstation --zone=us-central1-a
 
 ```bash
 gh auth login
-git clone https://github.com/PolicyEngine/policyengine-us.git
-cd policyengine-us
-uv venv --python 3.12 .venv
+git clone https://github.com/PolicyEngine/policyengine-us-data.git
+cd policyengine-us-data
+uv venv --python 3.13 .venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
@@ -108,16 +116,16 @@ tmux attach -t build
 
 ```bash
 # ALWAYS stop when done to save money
-gcloud compute instances stop dev-workstation --zone=us-central1-a
+gcloud compute instances stop dev-<name> --zone=us-central1-a
 
 # Start when needed
-gcloud compute instances start dev-workstation --zone=us-central1-a
+gcloud compute instances start dev-<name> --zone=us-central1-a
 
 # Check status
 gcloud compute instances list --zone=us-central1-a
 
 # Delete permanently (destroys all data)
-gcloud compute instances delete dev-workstation --zone=us-central1-a
+gcloud compute instances delete dev-<name> --zone=us-central1-a
 ```
 
 ---
@@ -139,8 +147,8 @@ This is an **on-demand** instance (not spot) — it will not be preempted.
 ### VS Code can't connect
 
 1. Check VM is running: `gcloud compute instances list --zone=us-central1-a`
-2. Re-run `gcloud compute config-ssh` (IP may have changed after stop/start)
-3. Try terminal SSH first to verify connectivity: `gcloud compute ssh dev-workstation --zone=us-central1-a`
+2. Re-run `gcloud compute config-ssh` or update HostName in `~/.ssh/config` (IP changes on stop/start)
+3. Try terminal SSH first to verify connectivity: `gcloud compute ssh dev-<name> --zone=us-central1-a`
 
 ### Startup script didn't finish
 
@@ -158,9 +166,9 @@ sudo journalctl -u google-startup-scripts.service
 
 Stop the VM, resize, then restart:
 ```bash
-gcloud compute instances stop dev-workstation --zone=us-central1-a
-gcloud compute instances set-machine-type dev-workstation --zone=us-central1-a --machine-type=n2-standard-16
-gcloud compute instances start dev-workstation --zone=us-central1-a
+gcloud compute instances stop dev-<name> --zone=us-central1-a
+gcloud compute instances set-machine-type dev-<name> --zone=us-central1-a --machine-type=n2-standard-16
+gcloud compute instances start dev-<name> --zone=us-central1-a
 ```
 
 ---
