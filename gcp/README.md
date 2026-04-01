@@ -4,6 +4,7 @@ This directory contains scripts and documentation for GCP infrastructure setup.
 
 ## Contents
 
+- **Dev Workstation**: [`create_dev_workstation.sh`](./create_dev_workstation.sh) - On-demand VM for VS Code Remote SSH ([quick start](./DEV_WORKSTATION_QUICK_START.md))
 - **Jupyter Lab**: [`create_jupyter_spot.sh`](./create_jupyter_spot.sh) - Interactive development environment ([quick start](./JUPYTER_QUICK_START.md))
 - **GitHub Runners**: [`github-runners/`](./github-runners/) - Self-hosted CI/CD runners ([setup guide](./github-runners/README.md))
 - **Planning Docs**: `GITHUB_RUNNER_SETUP.md`
