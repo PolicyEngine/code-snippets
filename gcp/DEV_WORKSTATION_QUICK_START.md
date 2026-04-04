@@ -31,9 +31,12 @@ Grant these roles to the team member's Google email in [IAM & Admin > IAM](https
 ```bash
 gcloud auth login
 gcloud config set project policyengine-research
+gcloud config set compute/zone us-central1-a
 ```
 
-**Note:** `gcloud compute config-ssh` requires project-level metadata permissions that team members may not have. Instead, connect via terminal SSH first (`gcloud compute ssh dev-<name> --zone=us-central1-a`), which sets up instance-level keys automatically. For VS Code, see the connection section below.
+With the default zone set, you can omit `--zone=us-central1-a` from all commands below.
+
+**Note:** `gcloud compute config-ssh` requires project-level metadata permissions that team members may not have. Instead, connect via terminal SSH first (`gcloud compute ssh dev-<name>`), which sets up instance-level keys automatically. For VS Code, see the connection section below.
 
 No GCP Console access needed. Works fine on low-spec machines (8GB Mac, etc.) since all compute happens on the VM.
 
@@ -59,8 +62,7 @@ No GCP Console access needed. Works fine on low-spec machines (8GB Mac, etc.) si
 
 1. Start the VM if stopped:
    ```bash
-   gcloud compute instances start dev-<name> --zone=us-central1-a
-   ```
+   gcloud compute instances start dev-<name>   ```
 2. In VS Code: `Ctrl+Shift+P` > **Remote-SSH: Connect to Host** > select your VM
 
 **Note:** The IP changes on stop/start. Re-run `gcloud compute config-ssh` or update the HostName in `~/.ssh/config`.
@@ -70,8 +72,7 @@ No GCP Console access needed. Works fine on low-spec machines (8GB Mac, etc.) si
 ## Connect via Terminal
 
 ```bash
-gcloud compute ssh dev-<name> --zone=us-central1-a
-```
+gcloud compute ssh dev-<name>```
 
 ---
 
@@ -85,6 +86,23 @@ gcloud compute ssh dev-<name> --zone=us-central1-a
 | tmux | Terminal multiplexer (mouse on, 50k history) |
 | build-essential | C/C++ compiler toolchain for native extensions |
 | curl, unzip | Utilities |
+
+---
+
+## First-Time VM Setup
+
+### Set up Hugging Face token (required for private data downloads)
+
+```bash
+echo 'export HUGGING_FACE_TOKEN=hf_your_token_here' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Install Claude Code (optional)
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
 
 ---
 
@@ -116,17 +134,13 @@ tmux attach -t build
 
 ```bash
 # ALWAYS stop when done to save money
-gcloud compute instances stop dev-<name> --zone=us-central1-a
-
+gcloud compute instances stop dev-<name>
 # Start when needed
-gcloud compute instances start dev-<name> --zone=us-central1-a
-
+gcloud compute instances start dev-<name>
 # Check status
-gcloud compute instances list --zone=us-central1-a
-
+gcloud compute instances list
 # Delete permanently (destroys all data)
-gcloud compute instances delete dev-<name> --zone=us-central1-a
-```
+gcloud compute instances delete dev-<name>```
 
 ---
 
@@ -166,10 +180,8 @@ sudo journalctl -u google-startup-scripts.service
 
 Stop the VM, resize, then restart:
 ```bash
-gcloud compute instances stop dev-<name> --zone=us-central1-a
-gcloud compute instances set-machine-type dev-<name> --zone=us-central1-a --machine-type=n2-standard-16
-gcloud compute instances start dev-<name> --zone=us-central1-a
-```
+gcloud compute instances stop dev-<name>gcloud compute instances set-machine-type dev-<name> --zone=us-central1-a --machine-type=n2-standard-16
+gcloud compute instances start dev-<name>```
 
 ---
 
