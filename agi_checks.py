@@ -1,43 +1,147 @@
 import numpy as np
 import pandas as pd
+from microdf import MicroDataFrame
 from policyengine_us import Microsimulation
 
-sim = Microsimulation(dataset="hf://policyengine/test/apr/states/NY.h5")
+
+DATASET = "hf://policyengine/test/apr/states/NY.h5"
+STATE = DATASET.rsplit("/", 1)[-1].removesuffix(".h5")
 YEAR = 2024
 
-agi_mdf = sim.calculate("adjusted_gross_income", period=YEAR, map_to="household")
-weight = sim.calculate("household_weight", period=YEAR).values
 
-df = pd.DataFrame({"agi": agi_mdf.values, "weight": weight, "tax": 6}) #tax})
-df["agi_decile"] = agi_mdf.decile_rank().values.astype(int)
+def summarize_agi(series):
+    mask = (series.weights > 0).to_numpy() & np.isfinite(series.values)
+    series = series[mask]
 
-print("=== AGI Distribution by Decile (weighted) ===")
-for d in range(1, 11):
-    s = df[df["agi_decile"] == d]
-    if len(s) == 0:
-        print(f"Decile {d:2d}: (empty)")
-        continue
-    avg_agi = np.average(s["agi"], weights=s["weight"])
-    min_agi = s["agi"].min()
-    max_agi = s["agi"].max()
-    total_tax = (s["tax"] * s["weight"]).sum()
-    print(
-        f"Decile {d:2d}: AGI ${min_agi:,.0f} – ${max_agi:,.0f}, avg ${avg_agi:,.0f}"
+    if len(series) == 0:
+        return {
+            "households": 0,
+            "weighted_households": 0.0,
+            "min_agi": np.nan,
+            "median_agi": np.nan,
+            "mean_agi": np.nan,
+            "max_agi": np.nan,
+        }
+
+    return {
+        "households": int(len(series)),
+        "weighted_households": float(series.weights.sum()),
+        "min_agi": float(series.min()),
+        "median_agi": float(series.median()),
+        "mean_agi": float(series.mean()),
+        "max_agi": float(series.max()),
+    }
+
+
+fmt_currency = lambda value: "nan" if pd.isna(value) else f"${value:,.0f}"
+
+sim = Microsimulation(dataset=DATASET)
+
+agi = sim.calculate("adjusted_gross_income", period=YEAR, map_to="household")
+household_weight = sim.calculate("household_weight", period=YEAR, map_to="household")
+district = sim.calculate("congressional_district_geoid", period=YEAR, map_to="household")
+
+# `calculate_dataframe(..., map_to="household")` is pulling mismatched weights
+# here, so build the MicroDataFrame directly from household-mapped series.
+household_agi = MicroDataFrame(
+    pd.DataFrame(
+        {
+            "agi": agi.values,
+            "district": district.values,
+        }
+    ),
+    weights=household_weight.values,
+)
+
+agi = household_agi["agi"]
+
+state_summary = summarize_agi(agi)
+
+print(f"=== {STATE} Adjusted Gross Income Summary (weighted) ===")
+print(f"Households: {state_summary['households']:,}")
+print(f"Weighted households: {state_summary['weighted_households']:,.0f}")
+print(f"Min AGI: {fmt_currency(state_summary['min_agi'])}")
+print(f"Median AGI: {fmt_currency(state_summary['median_agi'])}")
+print(f"Mean AGI: {fmt_currency(state_summary['mean_agi'])}")
+print(f"Max AGI: {fmt_currency(state_summary['max_agi'])}")
+
+agi_deciles = agi.decile_rank()
+decile_rows = []
+
+print("\n=== AGI Distribution by Decile (weighted) across the state ===")
+for decile in range(1, 11):
+    decile_slice = agi[agi_deciles == decile]
+    decile_rows.append({"decile": decile, **summarize_agi(decile_slice)})
+
+decile_summary = pd.DataFrame(decile_rows)
+formatted_deciles = decile_summary.copy()
+formatted_deciles["weighted_households"] = formatted_deciles["weighted_households"].map(
+    lambda value: f"{value:,.0f}"
+)
+for column in ["min_agi", "median_agi", "mean_agi", "max_agi"]:
+    formatted_deciles[column] = formatted_deciles[column].map(fmt_currency)
+print(formatted_deciles.to_string(index=False))
+
+district_rows = []
+district_geoids = sorted(pd.Series(household_agi["district"].values).dropna().astype(int).unique())
+
+for geoid in district_geoids:
+    district_slice = household_agi[household_agi["district"] == geoid]["agi"]
+    district_rows.append(
+        {
+            "district": f"{STATE}-{geoid % 100:02d}",
+            "geoid": geoid,
+            **summarize_agi(district_slice),
+        }
     )
 
+district_summary = pd.DataFrame(district_rows).sort_values("geoid").reset_index(drop=True)
 
-#sim = Microsimulation(dataset="/home/baogorek/devl/temp/policyengine-us-data/local_area_build/states/WA.h5")
-#tax = sim.calculate("wa_millionaires_tax", period=YEAR, map_to="household").values
-#looking strictly at the AGI distribution in a vacuum.
-#
-# Check for families with young children in decile 1
+print("\n=== District AGI Summary (weighted) ===")
+formatted_districts = district_summary.copy()
+formatted_districts["weighted_households"] = formatted_districts["weighted_households"].map(
+    lambda value: f"{value:,.0f}"
+)
+for column in ["min_agi", "median_agi", "mean_agi", "max_agi"]:
+    formatted_districts[column] = formatted_districts[column].map(fmt_currency)
+print(formatted_districts.to_string(index=False))
+
+district_weight_sum = district_summary["weighted_households"].sum()
+district_mean = (
+    district_summary["mean_agi"] * district_summary["weighted_households"]
+).sum() / district_weight_sum
+
+print("\n=== Sanity Checks ===")
+print(
+    "District weights sum to state weights:",
+    np.isclose(district_weight_sum, state_summary["weighted_households"]),
+)
+print(
+    "District weighted mean recomposes to state mean:",
+    np.isclose(district_mean, state_summary["mean_agi"]),
+)
+print(
+    "District minimum matches state minimum:",
+    district_summary["min_agi"].min() == state_summary["min_agi"],
+)
+print(
+    "District maximum matches state maximum:",
+    district_summary["max_agi"].max() == state_summary["max_agi"],
+)
+
 print("\n=== Young Children in Decile 1 ===")
 person_df = sim.calculate_dataframe(
     ["person_id", "household_id", "age", "is_child"],
     period=YEAR,
+    use_weights=False,
 )
 hh_ids = sim.calculate("household_id", period=YEAR, map_to="household").values
-hh_df = pd.DataFrame({"household_id": hh_ids, "agi_decile": df["agi_decile"].values})
+hh_df = pd.DataFrame(
+    {
+        "household_id": hh_ids,
+        "agi_decile": agi_deciles.values.astype(int),
+    }
+)
 
 merged = person_df.merge(hh_df, on="household_id")
 decile1 = merged[merged["agi_decile"] == 1]
