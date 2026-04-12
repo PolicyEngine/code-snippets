@@ -6,20 +6,46 @@ Pass --text to also write a plain-text copy (no ANSI codes) to report.txt.
 import json
 import re
 import sys
-from common import LABEL_A, LABEL_B, VERBOSE, green, red, bold, fmt, hr
+
+from common import LABEL_A, LABEL_B, VERBOSE, bold, fmt, green, hr, red
 
 WRITE_TEXT = "--text" in sys.argv
 
 _lines = []
 _orig_print = print
 
+
 def print(*args, **kwargs):
     _orig_print(*args, **kwargs)
     if WRITE_TEXT:
         import io
+
         buf = io.StringIO()
         _orig_print(*args, **{**kwargs, "file": buf})
         _lines.append(buf.getvalue())
+
+
+def status_text(passed):
+    if passed is True:
+        return green("PASS")
+    if passed is False:
+        return red("FAIL")
+    return "N/A"
+
+
+def state_result_name(result_a, result_b):
+    return result_a.get("name") or result_b.get("name") or "Unknown state check"
+
+
+def normalize_state_result(result, name):
+    if result and "name" in result:
+        normalized = dict(result)
+        if "passed" not in normalized and "n_over_tol" in normalized:
+            normalized["passed"] = normalized["n_over_tol"] == 0
+        if "n_states" not in normalized:
+            normalized["n_states"] = len(normalized.get("rows", []))
+        return normalized
+    return {"name": name, "error": "Result missing", "passed": None}
 
 
 def print_point_report(results_a, results_b):
@@ -75,17 +101,56 @@ def print_range_report(results_a, results_b):
             range_str = f"< {fmt(hi)}"
 
         val_a_str = fmt(ra["value"]) if ra["passed"] is not None else str(ra["value"])[:14]
-        status_a = (green("PASS") if ra["passed"] else red("FAIL")) if ra["passed"] is not None else "N/A"
         val_b_str = fmt(rb["value"]) if rb["passed"] is not None else str(rb["value"])[:14]
-        status_b = (green("PASS") if rb["passed"] else red("FAIL")) if rb["passed"] is not None else "N/A"
 
-        print(f"{ra['name']:<24s} {range_str:>20s}  {val_a_str:>14s}  {val_b_str:>14s}  {status_a:>6s}  {status_b:>6s}")
+        print(
+            f"{ra['name']:<24s} {range_str:>20s}  {val_a_str:>14s}  {val_b_str:>14s}  "
+            f"{status_text(ra['passed']):>6s}  {status_text(rb['passed']):>6s}"
+        )
     hr()
 
 
-def print_state_report(result_a, result_b):
+def print_consistency_report(results_a, results_b):
     print()
-    name = result_a["name"]
+    print(bold("CONSISTENCY CHECKS"))
+    hr()
+    hdr = f"{'Check':<28s} {LABEL_A:>24s}  {LABEL_B:>24s}  {'A':>6s}  {'B':>6s}"
+    print(bold(hdr))
+    hr()
+    for ra, rb in zip(results_a, results_b):
+        detail_a = ra.get("detail", str(ra.get("value", "N/A")))[:24]
+        detail_b = rb.get("detail", str(rb.get("value", "N/A")))[:24]
+        print(
+            f"{ra['name']:<28s} {detail_a:>24s}  {detail_b:>24s}  "
+            f"{status_text(ra.get('passed')):>6s}  {status_text(rb.get('passed')):>6s}"
+        )
+    hr()
+
+
+def state_winner(result_a, result_b):
+    if "error" in result_a and "error" in result_b:
+        return "—"
+    if "error" in result_a:
+        return LABEL_B
+    if "error" in result_b:
+        return LABEL_A
+    if result_a.get("passed") is True and result_b.get("passed") is False:
+        return green(LABEL_A)
+    if result_b.get("passed") is True and result_a.get("passed") is False:
+        return green(LABEL_B)
+    if result_a["median_error"] < result_b["median_error"]:
+        return green(LABEL_A)
+    if result_b["median_error"] < result_a["median_error"]:
+        return green(LABEL_B)
+    return "tie"
+
+
+def print_state_report(result_a, result_b):
+    name = state_result_name(result_a, result_b)
+    result_a = normalize_state_result(result_a, name)
+    result_b = normalize_state_result(result_b, name)
+
+    print()
     print(bold(f"STATE CHECK: {name}"))
     hr()
 
@@ -93,17 +158,14 @@ def print_state_report(result_a, result_b):
         if "error" in res:
             print(f"  {label}: {red(res['error'])}")
         else:
-            print(f"  {label}: median err {res['median_error']:.1%}, "
-                  f"{res['n_over_tol']} states over {res['tolerance']:.0%}, "
-                  f"worst: {res['worst_state']} ({res['worst_error']:.1%})")
+            print(
+                f"  {label}: {status_text(res.get('passed'))}, "
+                f"median err {res['median_error']:.1%}, "
+                f"{res['n_over_tol']}/{res['n_states']} states over {res['tolerance']:.0%}, "
+                f"worst: {res['worst_state']} ({res['worst_error']:.1%})"
+            )
 
-    if "error" not in result_a and "error" not in result_b:
-        if result_a["median_error"] < result_b["median_error"]:
-            print(f"  Winner (median error): {green(LABEL_A)}")
-        elif result_b["median_error"] < result_a["median_error"]:
-            print(f"  Winner (median error): {green(LABEL_B)}")
-        else:
-            print(f"  Winner (median error): tie")
+    print(f"  Winner: {state_winner(result_a, result_b)}")
 
     if VERBOSE and "rows" in result_a:
         print()
@@ -119,47 +181,74 @@ def print_state_report(result_a, result_b):
     hr()
 
 
-def print_summary(pt_a, pt_b, aca_a, aca_b, med_a, med_b):
+def print_summary(pt_a, pt_b, rng_a, rng_b, cons_a, cons_b, state_results):
     print()
     print(bold("SUMMARY"))
     hr()
-    a_wins = b_wins = 0
+
+    a_point_wins = b_point_wins = 0
     for ra, rb in zip(pt_a, pt_b):
         if ra["pct_error"] is not None and rb["pct_error"] is not None:
             if ra["pct_error"] < rb["pct_error"]:
-                a_wins += 1
+                a_point_wins += 1
             elif rb["pct_error"] < ra["pct_error"]:
-                b_wins += 1
-    for res_a, res_b in [(aca_a, aca_b), (med_a, med_b)]:
-        if "median_error" in res_a and "median_error" in res_b:
-            if res_a["median_error"] < res_b["median_error"]:
-                a_wins += 1
-            elif res_b["median_error"] < res_a["median_error"]:
-                b_wins += 1
-    print(f"  {LABEL_A} wins: {a_wins}")
-    print(f"  {LABEL_B} wins: {b_wins}")
+                b_point_wins += 1
+
+    print(f"  Point-target wins: {LABEL_A} {a_point_wins}, {LABEL_B} {b_point_wins}")
+    print(f"  Range passes: {LABEL_A} {sum(r['passed'] is True for r in rng_a)}/{len(rng_a)}, {LABEL_B} {sum(r['passed'] is True for r in rng_b)}/{len(rng_b)}")
+    print(f"  Consistency passes: {LABEL_A} {sum(r.get('passed') is True for r in cons_a)}/{len(cons_a)}, {LABEL_B} {sum(r.get('passed') is True for r in cons_b)}/{len(cons_b)}")
+
+    a_state_passes = sum(result.get("passed") is True for result in state_results["a"])
+    b_state_passes = sum(result.get("passed") is True for result in state_results["b"])
+    print(f"  State-check passes: {LABEL_A} {a_state_passes}/{len(state_results['a'])}, {LABEL_B} {b_state_passes}/{len(state_results['b'])}")
     hr()
 
-
-# ── Main ──────────────────────────────────────────────────────
 
 with open("results_a.json") as f:
     a = json.load(f)
 with open("results_b.json") as f:
     b = json.load(f)
 
-print_point_report(a["pt"], b["pt"])
-if a["rng"] and b["rng"]:
-    print_range_report(a["rng"], b["rng"])
-if a.get("aca") and b.get("aca") and "name" in a["aca"] and "name" in b["aca"]:
-    print_state_report(a["aca"], b["aca"])
-if a.get("med") and b.get("med") and "name" in a["med"] and "name" in b["med"]:
-    print_state_report(a["med"], b["med"])
-print_summary(a["pt"], b["pt"], a.get("aca", {}), b.get("aca", {}), a.get("med", {}), b.get("med", {}))
+pt_a = a.get("pt", [])
+pt_b = b.get("pt", [])
+rng_a = a.get("rng", [])
+rng_b = b.get("rng", [])
+cons_a = a.get("consistency", [])
+cons_b = b.get("consistency", [])
+aca_a = a.get("aca", {})
+aca_b = b.get("aca", {})
+med_a = a.get("med", {})
+med_b = b.get("med", {})
+
+aca_name = state_result_name(aca_a, aca_b)
+med_name = state_result_name(med_a, med_b)
+aca_a = normalize_state_result(aca_a, aca_name)
+aca_b = normalize_state_result(aca_b, aca_name)
+med_a = normalize_state_result(med_a, med_name)
+med_b = normalize_state_result(med_b, med_name)
+
+print_point_report(pt_a, pt_b)
+if rng_a and rng_b:
+    print_range_report(rng_a, rng_b)
+if cons_a and cons_b:
+    print_consistency_report(cons_a, cons_b)
+if aca_a or aca_b:
+    print_state_report(aca_a, aca_b)
+if med_a or med_b:
+    print_state_report(med_a, med_b)
+print_summary(
+    pt_a,
+    pt_b,
+    rng_a,
+    rng_b,
+    cons_a,
+    cons_b,
+    {"a": [aca_a, med_a], "b": [aca_b, med_b]},
+)
 
 if WRITE_TEXT:
     ansi_re = re.compile(r"\033\[[0-9;]*m")
     with open("report.txt", "w") as f:
         for line in _lines:
             f.write(ansi_re.sub("", line))
-    _orig_print(f"\nWrote report.txt")
+    _orig_print("\nWrote report.txt")

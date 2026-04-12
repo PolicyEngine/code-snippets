@@ -27,6 +27,11 @@ FALLBACK_CBO = {
     "income_tax": 4_000e9,
 }
 
+DATASET_CONFIGS = {
+    "a": {"path": PATH_A, "label": LABEL_A},
+    "b": {"path": PATH_B, "label": LABEL_B},
+}
+
 POINT_CHECKS = [
     ("SNAP", "snap", "cbo:snap", 0.20),
     ("Social Security", "social_security", "cbo:social_security", 0.20),
@@ -57,6 +62,31 @@ RANGE_CHECKS = [
     ("Citizen pct", "__citizen_pct__", 0.80, 0.95),
 ]
 
+CONSISTENCY_CHECKS = [
+    ("Undocumented == SSN NONE", "__undocumented_matches_ssn_none__"),
+]
+
+STATE_CHECKS = {
+    "aca": {
+        "var": "aca_ptc",
+        "map_to": "household",
+        "period": 2025,
+        "csv_path": CAL_DIR / "aca_spending_and_enrollment_2024.csv",
+        "target_col": "spending",
+        "tolerance": 0.70,
+        "name": "ACA PTC by state",
+    },
+    "med": {
+        "var": "medicaid_enrolled",
+        "map_to": "household",
+        "period": 2025,
+        "csv_path": CAL_DIR / "medicaid_enrollment_2024.csv",
+        "target_col": "enrollment",
+        "tolerance": 0.45,
+        "name": "Medicaid enrollment",
+    },
+}
+
 # ── Compute helpers ───────────────────────────────────────────
 
 def compute_value(sim, var_key, period=2024):
@@ -69,7 +99,13 @@ def compute_value(sim, var_key, period=2024):
             mask = sim.calculate("ssn_card_type", period=period) == "NONE"
             return float(mask.sum())
         if var_key == "__poverty_rate__":
-            return float(sim.calculate("person_in_poverty", map_to="person", period=period).mean())
+            # Avoid expanding SPM-unit poverty status out to every person, which
+            # can spike memory on large national builds.
+            in_poverty = sim.calculate("in_poverty", period=period).values.astype(float)
+            spm_unit_weight = sim.calculate("spm_unit_weight", period=period).values
+            spm_unit_size = sim.calculate("spm_unit_size", period=period).values
+            person_weights = spm_unit_weight * spm_unit_size
+            return float(np.average(in_poverty, weights=person_weights))
         if var_key == "__mean_empl_income__":
             return float(sim.calculate("employment_income", map_to="person", period=period).mean())
         if var_key == "__citizen_pct__":
@@ -84,12 +120,22 @@ def compute_value(sim, var_key, period=2024):
 def get_cbo_targets(sim, period=2024):
     targets = {}
     for key in ["snap", "social_security", "ssi", "income_tax"]:
-        try:
-            val = sim.tax_benefit_system.parameters(period).calibration.gov.cbo._children[key]
-            targets[key] = float(val)
-        except Exception:
-            targets[key] = FALLBACK_CBO[key]
+        targets[key] = resolve_cbo_target(sim, key, period)
     return targets
+
+
+def resolve_cbo_target(sim, key, period=2024):
+    try:
+        val = sim.tax_benefit_system.parameters(period).calibration.gov.cbo._children[key]
+        return float(val)
+    except Exception:
+        return FALLBACK_CBO[key]
+
+
+def resolve_point_target(sim, target_src, period=2024):
+    if isinstance(target_src, str) and target_src.startswith("cbo:"):
+        return resolve_cbo_target(sim, target_src[4:], period)
+    return target_src
 
 
 def run_point_checks(sim, cbo_targets, period=2024):
@@ -108,7 +154,6 @@ def run_point_checks(sim, cbo_targets, period=2024):
 def run_range_checks(sim, period=2024):
     results = []
     for name, var, lo, hi in RANGE_CHECKS:
-        print(name, var, lo, hi)
         val = compute_value(sim, var, period)
         if isinstance(val, str):
             results.append({"name": name, "value": val, "lo": lo, "hi": hi, "passed": None})
@@ -120,7 +165,7 @@ def run_range_checks(sim, period=2024):
 
 def run_state_check(sim, var, map_to, period, csv_path, target_col, tolerance, name):
     if not csv_path.exists():
-        return {"name": name, "error": f"CSV not found: {csv_path}"}
+        return {"name": name, "error": f"CSV not found: {csv_path}", "passed": None}
     targets = pd.read_csv(csv_path)
 
     if name == "ACA PTC by state":
@@ -132,7 +177,7 @@ def run_state_check(sim, var, map_to, period, csv_path, target_col, tolerance, n
         state_code_hh = sim.calculate("state_code", map_to="household").values
         values = sim.calculate(var, map_to=map_to, period=period)
     except Exception as e:
-        return {"name": name, "error": str(e)}
+        return {"name": name, "error": str(e), "passed": None}
 
     errors, rows = [], []
     for _, row in targets.iterrows():
@@ -147,13 +192,47 @@ def run_state_check(sim, var, map_to, period, csv_path, target_col, tolerance, n
     worst_idx = int(np.argmax(errors))
     return {
         "name": name,
+        "passed": over == 0,
         "median_error": float(np.median(errors)),
         "n_over_tol": over,
+        "n_states": len(rows),
         "tolerance": tolerance,
         "worst_state": rows[worst_idx][0],
         "worst_error": rows[worst_idx][3],
         "rows": rows,
     }
+
+
+def run_consistency_check(sim, check_key, name, period=2024):
+    try:
+        if check_key == "__undocumented_matches_ssn_none__":
+            ssn_type_none = sim.calculate("ssn_card_type", period=period) == "NONE"
+            undocumented = sim.calculate("immigration_status", period=period) == "UNDOCUMENTED"
+            mismatches = int((ssn_type_none != undocumented).sum())
+            return {
+                "name": name,
+                "value": mismatches,
+                "detail": f"{mismatches} mismatches",
+                "passed": mismatches == 0,
+            }
+    except Exception as e:
+        return {
+            "name": name,
+            "value": f"N/A ({e.__class__.__name__})",
+            "detail": str(e),
+            "passed": None,
+        }
+
+    return {
+        "name": name,
+        "value": "N/A (Unknown check)",
+        "detail": f"Unknown check key: {check_key}",
+        "passed": None,
+    }
+
+
+def get_dataset_config(dataset_key):
+    return DATASET_CONFIGS[dataset_key]
 
 
 # ── Formatting helpers ────────────────────────────────────────

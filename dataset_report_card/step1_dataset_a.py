@@ -1,34 +1,111 @@
-"""Load dataset A, run all checks, write results_a.json."""
+"""Run all Dataset A checks in short-lived subprocesses and write results_a.json."""
 
 import json
-from common import (
-    PATH_A, LABEL_A, CAL_DIR,
-    get_cbo_targets, run_point_checks, run_range_checks, run_state_check,
-)
-from policyengine_us import Microsimulation
+from pathlib import Path
+import subprocess
+import sys
 
-print(f"Loading {LABEL_A}...")
-sim = Microsimulation(dataset=PATH_A)
+from common import CONSISTENCY_CHECKS, FALLBACK_CBO, LABEL_A, POINT_CHECKS, RANGE_CHECKS, STATE_CHECKS
 
-cbo_targets = get_cbo_targets(sim)
-pt = run_point_checks(sim, cbo_targets)
-rng = run_range_checks(sim)
+DATASET_KEY = "a"
 
-print(f"ACA state check (2025) on {LABEL_A}...")
-aca = run_state_check(
-    sim, "aca_ptc", "household", 2025,
-    CAL_DIR / "aca_spending_and_enrollment_2024.csv",
-    "spending", 0.70, "ACA PTC by state",
-)
 
-print(f"Medicaid state check (2025) on {LABEL_A}...")
-med = run_state_check(
-    sim, "medicaid_enrolled", "household", 2025,
-    CAL_DIR / "medicaid_enrollment_2024.csv",
-    "enrollment", 0.45, "Medicaid enrollment",
-)
+def point_target_value(target_src):
+    if isinstance(target_src, str) and target_src.startswith("cbo:"):
+        return FALLBACK_CBO[target_src[4:]]
+    return target_src
+
+
+def failure_result(kind, identifier, error):
+    if kind == "pt":
+        name, _, target_src, tol = POINT_CHECKS[identifier]
+        return {
+            "name": name,
+            "value": f"ERROR ({error})",
+            "target": point_target_value(target_src),
+            "tol": tol,
+            "pct_error": None,
+            "error": error,
+        }
+    if kind == "rng":
+        name, _, lo, hi = RANGE_CHECKS[identifier]
+        return {
+            "name": name,
+            "value": f"ERROR ({error})",
+            "lo": lo,
+            "hi": hi,
+            "passed": None,
+            "error": error,
+        }
+    if kind == "cons":
+        name, _ = CONSISTENCY_CHECKS[identifier]
+        return {
+            "name": name,
+            "value": f"ERROR ({error})",
+            "detail": error,
+            "passed": None,
+            "error": error,
+        }
+    return {
+        "name": STATE_CHECKS[kind]["name"],
+        "error": error,
+        "passed": None,
+    }
+
+
+def run_indexed_checks(kind, count):
+    results = []
+    for i in range(count):
+        result_path = Path(f"results_{DATASET_KEY}_{kind}_{i}.json")
+        result_path.unlink(missing_ok=True)
+        try:
+            subprocess.run([sys.executable, "step_part.py", DATASET_KEY, kind, str(i)], check=True)
+            with open(result_path) as f:
+                results.append(json.load(f))
+        except subprocess.CalledProcessError as exc:
+            error = f"subprocess failed with return code {exc.returncode}"
+            print(f"{LABEL_A}: {kind}[{i}] failed: {error}")
+            result = failure_result(kind, i, error)
+            with open(result_path, "w") as f:
+                json.dump(result, f)
+            results.append(result)
+    return results
+
+
+def run_state_check(kind):
+    result_path = Path(f"results_{DATASET_KEY}_{kind}.json")
+    result_path.unlink(missing_ok=True)
+    try:
+        subprocess.run([sys.executable, "step_part.py", DATASET_KEY, kind], check=True)
+        with open(result_path) as f:
+            return json.load(f)
+    except subprocess.CalledProcessError as exc:
+        error = f"subprocess failed with return code {exc.returncode}"
+        print(f"{LABEL_A}: {kind} failed: {error}")
+        result = failure_result(kind, kind, error)
+        with open(result_path, "w") as f:
+            json.dump(result, f)
+        return result
+
+
+print(f"Loading {LABEL_A} through subprocess checks...")
+
+pt = run_indexed_checks("pt", len(POINT_CHECKS))
+rng = run_indexed_checks("rng", len(RANGE_CHECKS))
+consistency = run_indexed_checks("cons", len(CONSISTENCY_CHECKS))
+aca = run_state_check("aca")
+med = run_state_check("med")
 
 with open("results_a.json", "w") as f:
-    json.dump({"cbo_targets": cbo_targets, "pt": pt, "rng": rng, "aca": aca, "med": med}, f)
+    json.dump(
+        {
+            "pt": pt,
+            "rng": rng,
+            "consistency": consistency,
+            "aca": aca,
+            "med": med,
+        },
+        f,
+    )
 
 print("Wrote results_a.json")
