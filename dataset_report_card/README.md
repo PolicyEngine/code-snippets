@@ -37,9 +37,12 @@ PATH_B = "hf://policyengine/test/apr/national/US.h5"
 
 This runs three steps:
 
-1. **step1_dataset_a.py** — loads Dataset A, runs all checks, writes `results_a.json`
-2. **step2_dataset_b.py** — loads Dataset B, runs point checks (one per subprocess to avoid memory issues), writes `results_b.json`
+1. **step1_dataset_a.py** — runs Dataset A checks in short-lived subprocesses, writes `results_a.json`
+2. **step2_dataset_b.py** — runs Dataset B checks in short-lived subprocesses, writes `results_b.json`
 3. **step3_report.py** — reads both result files and prints a comparison report (pass `--text` to also write `report.txt`)
+
+The subprocess pattern is deliberate. Each check gets its own `Microsimulation`, then the process exits so memory is returned to the OS before the next check starts.
+If one subprocess is killed or errors, that check is recorded as an error in the report and the remaining checks continue.
 
 ## Checks
 
@@ -47,4 +50,7 @@ This runs three steps:
 |------|---------------|
 | Point-target | SNAP, Social Security, SSI, employment income, AGI, income tax, EITC, CTC, tips, rent, real estate taxes, population/household counts |
 | Range | Floors and ceilings for income tax, employment income, household/person weights, poverty rate, citizenship pct |
+| Consistency | Direct invariants from the integration tests, such as `UNDOCUMENTED == SSN NONE` |
 | State-level | ACA PTC spending by state, Medicaid enrollment by state |
+
+The state checks now run for both datasets, so ACA and Medicaid failures appear in the scorecard instead of being silently omitted when only one side was computed.
