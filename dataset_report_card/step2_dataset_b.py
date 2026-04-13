@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from common import CONSISTENCY_CHECKS, FALLBACK_CBO, LABEL_B, POINT_CHECKS, RANGE_CHECKS, STATE_CHECKS
+from common import CONSISTENCY_CHECKS, FALLBACK_CBO, INCLUDE_RANGE_CHECKS, LABEL_B, POINT_CHECKS, RANGE_CHECKS, STATE_CHECKS
 
 DATASET_KEY = "b"
 
@@ -91,7 +91,11 @@ def run_state_check(kind):
 print(f"Loading {LABEL_B} through subprocess checks...")
 
 pt = run_indexed_checks("pt", len(POINT_CHECKS))
-rng = run_indexed_checks("rng", len(RANGE_CHECKS))
+if INCLUDE_RANGE_CHECKS:
+    rng = run_indexed_checks("rng", len(RANGE_CHECKS))
+else:
+    print(f"{LABEL_B}: skipping range checks (REPORT_SKIP_RANGE set)")
+    rng = []
 consistency = run_indexed_checks("cons", len(CONSISTENCY_CHECKS))
 aca = run_state_check("aca")
 med = run_state_check("med")

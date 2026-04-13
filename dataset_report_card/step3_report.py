@@ -7,7 +7,18 @@ import json
 import re
 import sys
 
-from common import LABEL_A, LABEL_B, VERBOSE, bold, fmt, green, hr, red
+from common import (
+    LABEL_A,
+    LABEL_B,
+    POINT_CHECKS,
+    VERBOSE,
+    bold,
+    fmt,
+    green,
+    hr,
+    red,
+    resolve_calib_estimate,
+)
 
 WRITE_TEXT = "--text" in sys.argv
 
@@ -49,18 +60,31 @@ def normalize_state_result(result, name):
 
 
 def print_point_report(results_a, results_b):
+    if len(results_a) != len(POINT_CHECKS) or len(results_b) != len(POINT_CHECKS):
+        raise RuntimeError(
+            f"POINT_CHECKS length {len(POINT_CHECKS)} does not match results_a "
+            f"({len(results_a)}) or results_b ({len(results_b)}). Stale JSONs?"
+        )
     print()
     print(bold("POINT-TARGET CHECKS"))
-    hr()
-    hdr = f"{'Check':<22s} {'Target':>12s}  {LABEL_A:>14s}  {LABEL_B:>14s}  {'Err A':>7s}  {'Err B':>7s}  Winner"
+    hr(width=116)
+    hdr = (
+        f"{'Check':<22s} {'Target':>12s}  {LABEL_A:>14s}  {LABEL_B:>14s}  "
+        f"{'Calib':>14s}  {'Err A':>7s}  {'Err B':>7s}  Winner"
+    )
     print(bold(hdr))
-    hr()
-    for ra, rb in zip(results_a, results_b):
+    hr(width=116)
+    for (_name, _var, target_src, _tol), ra, rb in zip(POINT_CHECKS, results_a, results_b):
         target_str = fmt(ra["target"])
         val_a_str = fmt(ra["value"]) if ra["pct_error"] is not None else str(ra["value"])[:14]
         err_a_str = f"{ra['pct_error']:.1%}" if ra["pct_error"] is not None else "N/A"
         val_b_str = fmt(rb["value"]) if rb["pct_error"] is not None else str(rb["value"])[:14]
         err_b_str = f"{rb['pct_error']:.1%}" if rb["pct_error"] is not None else "N/A"
+
+        if isinstance(target_src, str) and target_src.startswith("calib:"):
+            calib_str = fmt(resolve_calib_estimate(target_src[6:]))
+        else:
+            calib_str = "—"
 
         if ra["pct_error"] is None and rb["pct_error"] is None:
             winner = "—"
@@ -80,8 +104,11 @@ def print_point_report(results_a, results_b):
         if rb["pct_error"] is not None:
             err_b_str = (green if rb["pct_error"] <= rb["tol"] else red)(err_b_str)
 
-        print(f"{ra['name']:<22s} {target_str:>12s}  {val_a_str:>14s}  {val_b_str:>14s}  {err_a_str:>7s}  {err_b_str:>7s}  {winner}")
-    hr()
+        print(
+            f"{ra['name']:<22s} {target_str:>12s}  {val_a_str:>14s}  {val_b_str:>14s}  "
+            f"{calib_str:>14s}  {err_a_str:>7s}  {err_b_str:>7s}  {winner}"
+        )
+    hr(width=116)
 
 
 def print_range_report(results_a, results_b):

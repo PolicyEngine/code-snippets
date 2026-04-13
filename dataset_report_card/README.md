@@ -18,16 +18,23 @@ sim = Microsimulation(dataset="/path/to/local_area_build/national/US.h5")
 
 ## Configuration
 
-Edit `common.py` to set the two dataset paths:
+`PATH_A` is a Hugging Face URL and lives in `common.py`. `PATH_B` and the state-check calibration targets both derive from a local `policyengine-us-data` checkout, controlled by one env var:
 
-```python
-# Dataset A — the baseline (typically the production enhanced CPS from HF)
-PATH_A = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
-
-# Dataset B — the candidate (HF or local)
-PATH_B = "hf://policyengine/test/apr/national/US.h5"
-# PATH_B = "/home/you/devl/policyengine-us-data/local_area_build/national/US.h5"
+```bash
+export POLICYENGINE_US_DATA_ROOT=/path/to/policyengine-us-data
 ```
+
+If unset, it defaults to `~/policyengine-us-data`. The expected layout under the root is:
+
+```
+policyengine-us-data/
+├── local_area_build/national/US.h5              # becomes PATH_B
+└── policyengine_us_data/storage/calibration_targets/
+    ├── aca_spending_and_enrollment_2024.csv
+    └── medicaid_enrollment_2024.csv
+```
+
+To point Dataset B at a Hugging Face URL instead, edit `PATH_B` in `common.py` directly.
 
 ## Running
 
