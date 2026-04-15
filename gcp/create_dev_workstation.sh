@@ -15,7 +15,7 @@ echo "Creating on-demand dev workstation '${VM_NAME}' with ${DISK_SIZE}GB disk..
 
 gcloud compute instances create "${VM_NAME}" \
     --zone=us-central1-a \
-    --machine-type=n2-standard-8 \
+    --machine-type=n2-standard-16 \
     --provisioning-model=STANDARD \
     --boot-disk-size="${DISK_SIZE}GB" \
     --boot-disk-type=pd-standard \
@@ -36,7 +36,7 @@ apt-get update
 apt-get install -y gh
 
 # Create 16GB swap file (half of 32GB RAM)
-fallocate -l 16G /swapfile
+fallocate -l 32G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
