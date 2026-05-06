@@ -7,7 +7,18 @@ import json
 import re
 import sys
 
-from common import LABEL_A, LABEL_B, VERBOSE, bold, fmt, green, hr, red
+from common import (
+    LABEL_A,
+    LABEL_B,
+    ONLY_IN_DB_YAML,
+    ONLY_IN_LOSS_PY,
+    VERBOSE,
+    bold,
+    fmt,
+    green,
+    hr,
+    red,
+)
 
 WRITE_TEXT = "--text" in sys.argv
 
@@ -181,6 +192,27 @@ def print_state_report(result_a, result_b):
     hr()
 
 
+def print_calibration_coverage_diff():
+    """Print targets calibrated by only one of the two datasets.
+
+    The point-target table above only includes targets present in
+    BOTH calibration paths. This section lists what each side
+    additionally calibrates against, so the comparison's blind
+    spots are explicit. Lists are curated in common.py.
+    """
+    print()
+    print(bold("CALIBRATION COVERAGE — TARGETS ONLY ONE SIDE CALIBRATES"))
+    hr()
+    print(bold(f"Only in {LABEL_A} (loss.py):"))
+    for item in ONLY_IN_LOSS_PY:
+        print(f"  - {item}")
+    print()
+    print(bold(f"Only in {LABEL_B} (target_config.yaml + policy_data.db):"))
+    for item in ONLY_IN_DB_YAML:
+        print(f"  - {item}")
+    hr()
+
+
 def print_summary(pt_a, pt_b, rng_a, rng_b, cons_a, cons_b, state_results):
     print()
     print(bold("SUMMARY"))
@@ -245,6 +277,7 @@ print_summary(
     cons_b,
     {"a": [aca_a, med_a], "b": [aca_b, med_b]},
 )
+print_calibration_coverage_diff()
 
 if WRITE_TEXT:
     ansi_re = re.compile(r"\033\[[0-9;]*m")
