@@ -3,6 +3,8 @@ import pandas as pd
 from microdf import MicroDataFrame
 from policyengine_us import Microsimulation
 
+from agi_checks_helpers import summarize_young_children
+
 
 DATASET = "hf://policyengine/test/apr/states/NY.h5"
 STATE = DATASET.rsplit("/", 1)[-1].removesuffix(".h5")
@@ -131,7 +133,7 @@ print(
 
 print("\n=== Young Children in Decile 1 ===")
 person_df = sim.calculate_dataframe(
-    ["person_id", "household_id", "age", "is_child"],
+    ["person_id", "household_id", "age", "is_child", "person_weight"],
     period=YEAR,
     use_weights=False,
 )
@@ -140,16 +142,24 @@ hh_df = pd.DataFrame(
     {
         "household_id": hh_ids,
         "agi_decile": agi_deciles.values.astype(int),
+        "household_weight": household_weight.values,
     }
 )
 
 merged = person_df.merge(hh_df, on="household_id")
 decile1 = merged[merged["agi_decile"] == 1]
 young = decile1[decile1["age"] < 6]
+population_summary = summarize_young_children(decile1)
 
-print(f"Total persons in decile 1: {len(decile1)}")
-print(f"Young children (age < 6) in decile 1: {len(young)}")
-print(f"Households with young children in decile 1: {young['household_id'].nunique()}")
+print(f"Projected persons in decile 1: {population_summary['persons']:,.0f}")
+print(
+    "Projected young children (age < 6) in decile 1: "
+    f"{population_summary['young_children']:,.0f}"
+)
+print(
+    "Projected households with young children in decile 1: "
+    f"{population_summary['households_with_young_children']:,.0f}"
+)
 if len(young) > 0:
     print("\nSample young children in decile 1:")
     print(young[["person_id", "household_id", "age", "is_child"]].head(20).to_string())
